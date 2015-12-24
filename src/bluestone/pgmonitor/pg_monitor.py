@@ -181,7 +181,7 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
         if err:
             import traceback
             print( err )
-            traceback.print_tb( err )
+            traceback.print_exc( err )
         
         return conn
         
