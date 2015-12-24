@@ -4,3 +4,8 @@ PG_CONN_INFO = { 'pgnode1' : 'postgresql://bluestone:password@centos7-pg1.bluest
                  'pgnode2' :  'postgresql://yourlaw@127.0.0.1:5432/yourlaw' }
 
 REPMGR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
+
+ALERT_SMTPHOST = '127.0.0.1'
+ALERT_NOTIFY_LIST = [ 'rseward@bluestone-consulting.com', 'sewardrobert@gmail.com' ]
+ALERT_FROM_EMAIL = 'postgres@bluestone-consulting.com'
+

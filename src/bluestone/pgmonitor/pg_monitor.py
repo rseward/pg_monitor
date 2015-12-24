@@ -13,6 +13,11 @@ import subprocess
 
 import argparse
 
+from alerts import EmailAlertManager
+
+def getHostname():
+    import os
+    return os.uname()[1].split(".")[0]
 
 def import_config( name, filepath):
   d = imp.new_module( name )
@@ -58,10 +63,13 @@ class PgClusterMonitor(object):
       
         self.pgnodes = self.config['PG_NODES']
 
+        self.master = None
         for node in self.pgnodes:
             name = node.get( "name" , None )
             if name:
                 node[ 'conninfo' ]  = self.config['PG_CONN_INFO'].get( name, None )
+            if node[ "type" ] == "master":
+                self.master = name
 
         self.loadReprMgr( self.config[ 'REPMGR_CONFIG' ] )
 
@@ -71,6 +79,22 @@ class PgClusterMonitor(object):
         self.reconnect_attempts = self.repmgr[ 'reconnect_attempts' ]
         self.reconnect_interval = self.repmgr[ 'reconnect_interval' ]
 
+        self.alertman = None
+        if self.config.get('ALERT_NOTIFY_LIST', None):
+            self.alertman = EmailAlertManager( self.config['ALERT_SMTPHOST'] , self.config['ALERT_NOTIFY_LIST'], self.config['ALERT_FROM_EMAIL' ] )
+        else:
+            print( "[Warning] No alert notifications are configured." )
+        self.lastPromotion = None
+
+    def alert(self, subject, msg):
+      notifyinterval = 120
+      limit = 100
+      if self.alertman:
+        while limit>0:
+          self.alertman.alert( subject, msg)
+          time.sleep(notifyinterval)
+          notifyinterval=notifyinterval*2
+          limit=limit-1
 
     def loadConfig(self, configfile ):
       try:
@@ -112,8 +136,15 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
                 if not(self.quiet):
                   print("[%s] Cluster %s is healthy." % (datetime.datetime.now(), self.cluster) )
                 time.sleep(15)
-            except:
+            except MasterFailed as mf:
                 failure = True
+                self.alert( 'Master Failed',
+                    """Monitor on %s observed Master %s failed in cluster %s.
+Output from the last attempt to promote it's slave:
+%s\n\n
+Please Check on the health of the cluster."""
+                            % ( getHostname(), self.master, self.cluster, self.lastPromotion   )
+                )
                 raise
 
 
@@ -135,24 +166,36 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
 
     def _promote_slave(self):
         print( "%s" % self.promote_command )
-        proc = subprocess.Popen( self.promote_command, shell=True, stdout=subprocess.PIPE )
+        proc = subprocess.Popen( self.promote_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT )
 
         pstdout = proc.communicate()[0]
+        self.lastPromotion = "\n".join( [ repr(pstdout)  ] )
 
         print( repr(pstdout) )
-        return True
+        return proc.returncode == 0
 
         
 
     def promote_slave(self):
-        for n in self.pgnodes:
-            if n['type'] == 'slave':
-                conn = self.check_node( n )
+      reconnect_attempts = self.reconnect_attempts
+      success = False
 
-                if conn:
-                    print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
-                    self._promote_slave()
-                    conn.close()
+      conn = None
+      for n in self.pgnodes:
+        if n['type'] == 'slave':
+          conn = self.check_node( n )
+      
+
+      while conn and reconnect_attempts>0 and not(success):
+        if conn:
+          # TODO: Add support to promote remote slaves (via SSH)
+          print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
+          success = self._promote_slave()
+          reconnect_attempts = reconnect_attempts - 1
+          time.sleep( self.reconnect_interval )          
+
+      if conn:
+        conn.close()
                     
                 
     def check_node(self, node):
