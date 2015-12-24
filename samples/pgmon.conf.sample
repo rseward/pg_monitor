@@ -1,0 +1,6 @@
+PG_NODES = [ { 'name': 'pgnode1', 'type': 'master' }, {'name': 'pgnode2', 'type': 'slave'} ]
+
+PG_CONN_INFO = { 'pgnode1' : 'postgresql://bluestone:password@centos7-pg1.bluestone-consulting.com:5432/test',
+                 'pgnode2' :  'postgresql://yourlaw@127.0.0.1:5432/yourlaw' }
+
+REPMGR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
