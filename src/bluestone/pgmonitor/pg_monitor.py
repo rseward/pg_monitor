@@ -120,16 +120,16 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
     def check_nodes(self):
         enginemap = {}
         for n in self.pgnodes:
-            n['engine']=None
-            engine = self.check_node(n)
-            n[ 'engine' ] = engine
+            conn = self.check_node(n)
             enginemap[ n.get('name')] = n
 
-            if not(engine) and n.get('type') == 'master':
+            if not(conn) and n.get('type') == 'master':
                 print( "[%s] master failed" % datetime.datetime.now() )
                 self.promote_slave()
                 
                 raise MasterFailed( "Master failed" )
+
+            conn.close()
 
         return enginemap
 
@@ -147,34 +147,43 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
     def promote_slave(self):
         for n in self.pgnodes:
             if n['type'] == 'slave':
-                engine = self.check_node( n )
+                conn = self.check_node( n )
 
-                if engine:
+                if conn:
                     print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
                     self._promote_slave()
+                    conn.close()
                     
                 
     def check_node(self, node):
-        engine = None
+        conn = None
         reconnect_attempts = self.reconnect_attempts
         err = None
 
-        while reconnect_attempts>0 and not(engine):
+        while reconnect_attempts>0 and not(conn):
             try:
-                engine = create_engine( node.get( 'conninfo' ) )
-                engine.execute( 'SELECT current_timestamp' )
+                engine = node.get( 'engine' , None )
+                if not(engine):
+                  engine = create_engine( node.get( 'conninfo' ) )
+                  node[ 'engine' ] = engine
+
+                conn = engine.connect()
+                res = conn.execute( 'SELECT current_timestamp' )
+                res.close()
                 err = None
             except Exception as e :
                 reconnect_attempts=reconnect_attempts-1
                 time.sleep( self.reconnect_interval )
-                engine = None
+                conn = None
                 
                 err = e
                 
         if err:
+            import traceback
             print( err )
+            traceback.print_tb( err )
         
-        return engine
+        return conn
         
 
 def main():

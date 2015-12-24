@@ -24,7 +24,7 @@ Run this monitor on the slave. When the master fails the script will promote the
     ./install.sh
 
     cp samples/pgmon.conf.sample /var/lib/postgresql/repmgr/pgmon.conf
-		edit /var/lib/postgresql/repmgr/pgmon.conf
+    edit /var/lib/postgresql/repmgr/pgmon.conf
 		
 
 
