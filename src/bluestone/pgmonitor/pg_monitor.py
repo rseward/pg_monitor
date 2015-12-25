@@ -84,6 +84,7 @@ class PgClusterMonitor(object):
             self.alertman = EmailAlertManager( self.config['ALERT_SMTPHOST'] , self.config['ALERT_NOTIFY_LIST'], self.config['ALERT_FROM_EMAIL' ] )
         else:
             print( "[Warning] No alert notifications are configured." )
+        self.failedAt = None
         self.lastPromotion = None
         self.recovered = False
 
@@ -142,14 +143,18 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
                 time.sleep(15)
             except MasterFailed as mf:
                 failure = True
+                clusterState= "degraded" if self.recovered else "failed"
                 self.alert( 'Master Failed',
-                    """Monitor on %s observed Master %s failed in cluster %s.
+                    """Cluster %s is currently in a %s state.
+
+Monitor on %s observed Master %s fail at %s.
+
 Output from the last attempt to promote it's slave:
 
-%s\n\n
+%s\n
 
 Please Check on the health of the cluster."""
-                            % ( getHostname(), self.master, self.cluster, self.fixnewlines(self.lastPromotion)   )
+                            % ( self.cluster, clusterState, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion)   )
                 )
                 raise
 
@@ -163,6 +168,8 @@ Please Check on the health of the cluster."""
             enginemap[ n.get('name')] = n
 
             if not(conn) and n.get('type') == 'master':
+                if not(self.failedAt):
+                  self.failedAt = datetime.datetime.now()
                 print( "[%s] master failed" % datetime.datetime.now() )
                 self.promote_slave()
                 
