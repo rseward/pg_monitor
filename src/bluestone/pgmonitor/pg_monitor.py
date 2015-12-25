@@ -85,6 +85,7 @@ class PgClusterMonitor(object):
         else:
             print( "[Warning] No alert notifications are configured." )
         self.lastPromotion = None
+        self.recovered = False
 
     def alert(self, subject, msg):
       notifyinterval = 120
@@ -95,6 +96,9 @@ class PgClusterMonitor(object):
           time.sleep(notifyinterval)
           notifyinterval=notifyinterval*2
           limit=limit-1
+          if self.recovered:
+            # On recovery one e-mail should be enough.
+            limit=0
 
     def loadConfig(self, configfile ):
       try:
@@ -141,12 +145,16 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
                 self.alert( 'Master Failed',
                     """Monitor on %s observed Master %s failed in cluster %s.
 Output from the last attempt to promote it's slave:
+
 %s\n\n
+
 Please Check on the health of the cluster."""
-                            % ( getHostname(), self.master, self.cluster, self.lastPromotion   )
+                            % ( getHostname(), self.master, self.cluster, self.fixnewlines(self.lastPromotion)   )
                 )
                 raise
 
+    def fixnewlines(self, str):
+      return str.replace('\\r',chr(13)).replace('\\n',chr(10))
 
     def check_nodes(self):
         enginemap = {}
@@ -192,7 +200,8 @@ Please Check on the health of the cluster."""
           print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
           success = self._promote_slave()
           reconnect_attempts = reconnect_attempts - 1
-          time.sleep( self.reconnect_interval )          
+          time.sleep( self.reconnect_interval )
+          self.recovered = success
 
       if conn:
         conn.close()
