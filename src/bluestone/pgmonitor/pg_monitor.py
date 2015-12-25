@@ -144,17 +144,22 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
             except MasterFailed as mf:
                 failure = True
                 clusterState= "degraded" if self.recovered else "failed"
-                self.alert( 'Master Failed',
-                    """Cluster %s is currently in a %s state.
 
-Monitor on %s observed Master %s fail at %s.
+                msg = ""
+                if clusterState == "failed":
+                  msg = "\n\nQuick action is required to restore the cluster to health! Please bring the cluster back up."
+                
+                self.alert( 'Master Failed',
+                    """Cluster %s is currently in a %s state. %s
+
+Monitor on %s observed Master %s fail at %s. 
 
 Output from the last attempt to promote it's slave:
 
 %s\n
 
 Please Check on the health of the cluster."""
-                            % ( self.cluster, clusterState, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion)   )
+                            % ( self.cluster, clusterState, msg, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion).strip()   )
                 )
                 raise
 
