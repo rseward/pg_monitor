@@ -65,9 +65,11 @@ screen -ls
 # Source the python virtual env
 . %s
 
+export PGMON_PID=%s/pg_monitor.pid
+
 # Run the pg_monitor script, which should be on the path from the python virtual environment.
 pg_monitor --configfile %s
-                     """ % (activatePyve, args.configfile) )
+                     """ % (activatePyve, cwd, args.configfile) )
         print("[Info] Created %s" % runFile)
 
     # 3) Create a /etc/init.d/pgmonitor script as a convenient way to start and stop the script.
