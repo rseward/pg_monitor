@@ -164,8 +164,13 @@ Output from the last attempt to promote it's slave:
 
 %s\n
 
-Please Check on the health of the cluster."""
-                            % ( self.cluster, clusterState, msg, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion).strip()   )
+Please Check on the health of the cluster.
+
+To stop receiving these notifications. Login it to server %s and 
+execute the following command:
+    sudo /etc/init.d/pgmonitor stop
+"""
+                            % ( self.cluster, clusterState, msg, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion).strip(), getHostname()   )
                 )
                 raise
 
