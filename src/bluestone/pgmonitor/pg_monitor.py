@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 """
 Script to monitor the master and slave nodes and automate the promotion of the slave should the master fail.
 """
 
+import os
 import imp
 from sqlalchemy import *
 import sqlalchemy.exc
@@ -12,6 +15,7 @@ import datetime
 import subprocess
 
 import argparse
+import pid
 
 from alerts import EmailAlertManager
 
@@ -148,6 +152,8 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
                 msg = ""
                 if clusterState == "failed":
                   msg = "\n\nQuick action is required to restore the cluster to health! Please bring the cluster back up."
+                else:
+                  msg = "\n\nThe master node must be restored to bring the cluster to a healthy state."
                 
                 self.alert( 'Master Failed',
                     """Cluster %s is currently in a %s state. %s
@@ -249,19 +255,34 @@ Please Check on the health of the cluster."""
         
         return conn
         
-
 def main():
     ap = argparse.ArgumentParser(description='Bluestone PG Monitor Tool.')
     ap.add_argument('-q','--quiet', help='Reduce the verbosity of the tool.', default="false")
     ap.add_argument('-c','--configfile', help='Specify the location of the config file.', default='pg_monitor.conf')
+    ap.add_argument('-p','--pidfile', help="Specify the location of the pidfile.', default='pgmon.pid" )
 
     args = ap.parse_args()
 
     quiet = True if args.quiet == "true" else False
-  
-  
-    mon = PgClusterMonitor(args.configfile, quiet=quiet)
-    mon.monitor()
+
+    if os.environ.get( 'PGMON_PID', None) :
+        pgmonPid = os.environ[ 'PGMON_PID' ]
+        (piddir, pidfile) = os.path.split( pgmonPid )
+        (pidname, ext) = os.path.splitext( pidfile )
+
+        pid.DEFAULT_PID_DIR = piddir
+        
+        try:
+          with pid.PidFile( pidname=pidname ):
+            mon = PgClusterMonitor(args.configfile, quiet=quiet)
+            mon.monitor()
+        except pid.PidFileAlreadyLockedError:
+            print( "Unable to create pidfile=%s! Is another pg_monitor running?" % pgmonPid )
+            raise
+    else :
+        # Don't use PID file locking.
+        mon = PgClusterMonitor(args.configfile, quiet=quiet)
+        mon.monitor()      
     
     
 if __name__ == '__main__':
