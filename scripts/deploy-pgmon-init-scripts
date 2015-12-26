@@ -125,8 +125,10 @@ stop)
   if [ -f $PGMON_PID ] ; then
     kill $( cat $PGMON_PID )
     sleep 2
-    kill -9 $( cat $PGMON_PID )
-    rm -f $PGMON_PID
+    if [ -f $PGMON_PID ] ; then
+      kill -9 $( cat $PGMON_PID )
+      rm -f $PGMON_PID
+    fi;
   fi;
   ;;
 
