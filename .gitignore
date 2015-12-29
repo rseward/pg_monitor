@@ -1,5 +1,6 @@
 start.sh
 run.sh
+pg_monitor.pid
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
