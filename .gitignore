@@ -1,6 +1,7 @@
 start.sh
 run.sh
 pg_monitor.pid
+generated-init-script
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

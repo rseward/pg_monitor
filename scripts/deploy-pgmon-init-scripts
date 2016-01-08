@@ -3,7 +3,8 @@
 from __future__ import print_function
 
 """
-Script to be run by root, to write an init.d script to /etc/init.d/
+Script to be run by the postgres UNIX user. This script creates a "runasroot.sh" that 
+must be run by root to write an init.d script to /etc/init.d/
 """
 
 import sys
@@ -32,8 +33,9 @@ if __name__ == "__main__":
 
     startFile = os.path.join( cwd, "start.sh" )
     runFile = os.path.join( cwd, "run.sh" )
-    initFile = os.path.join( '/etc','init.d','pgmonitor' )
+    initFile = os.path.join( './generated-init-script', 'pgmonitor' )
     activatePyve = os.path.join( sys.prefix, "bin", "activate" )
+    runasrootFile = os.path.join( './generated-init-script', 'runasroot.sh' )
 
     if not(os.path.isfile(activatePyve)):
     
@@ -74,8 +76,9 @@ pg_monitor --configfile %s
 
     # 3) Create a /etc/init.d/pgmonitor script as a convenient way to start and stop the script.
     if not( os.path.isfile( initFile ) ):
+        os.makedirs( "./generated-init-script" )
         with open(initFile, "w") as outf:
-            outf.write(
+            outf.write( 
 """
 #!/bin/bash
 
@@ -148,26 +151,40 @@ register)
 
 esac
 """ % cwd )
-                
+
         print("[Info] Created %s" % initFile)
 
+    if not( os.path.isfile( runasrootFile ) ):
+        with open(runasrootFile, "w") as outf:
+            outf.write(
+"""
+#!/bin/bash
+
+######################################################################
+# pg_monitor run as root script
+######################################################################
+# Run this script as root to finish the installation of the pg_monitor
+#  utility. Execute this on the primary slave node.
+#
+
+chmod +x pgmonitor
+cp pgmonitor /etc/init.d/
+
+echo "To start the monitor exeucte '/etc/init.d/pgmonitor' as root on the slave node."
+
+""")
+
+        print("[Info] Created %s" % runasrootFile)
+
+    if not( os.path.isfile( "/etc/init.d/pgmonitor" ) ):
+        print("[Info] To complete the install, please, have the root user execute the %s script." % runasrootFile)
+
+    os.chmod( runasrootFile, 0755 )
     os.chmod( startFile, 0755 )
     os.chmod( runFile, 0755 )
     os.chmod( initFile, 0755 )
     
-    
-
-
-
-
-
-
-
-
-
-
-
-
+        
 
 
 
