@@ -45,8 +45,8 @@ Run this monitor on the slave with the postgres UNIX user. When the master fails
     $( which deploy-pgmon-init-scripts )
 		
     # Switch back to the root user
-		cd generated-init-script
-		./runasroot.sh  # Create the init script with the generated runasroot.sh script
+    cd generated-init-script
+    ./runasroot.sh  # Create the init script with the generated runasroot.sh script
     chkconfig --add pgmonitor
     chkconfig --list pgmonitor
     
