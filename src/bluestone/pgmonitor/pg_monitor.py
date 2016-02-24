@@ -7,17 +7,21 @@ Script to monitor the master and slave nodes and automate the promotion of the s
 """
 
 import os
+import os.path
 import imp
 from sqlalchemy import *
 import sqlalchemy.exc
 import time
 import datetime
 import subprocess
+import logging
 
 import argparse
 import pid
 
 from alerts import EmailAlertManager
+
+mylog = None
 
 def getHostname():
     import os
@@ -87,7 +91,7 @@ class PgClusterMonitor(object):
         if self.config.get('ALERT_NOTIFY_LIST', None):
             self.alertman = EmailAlertManager( self.config['ALERT_SMTPHOST'] , self.config['ALERT_NOTIFY_LIST'], self.config['ALERT_FROM_EMAIL' ] )
         else:
-            print( "[Warning] No alert notifications are configured." )
+            log.warn( "[Warning] No alert notifications are configured." )
         self.failedAt = None
         self.lastPromotion = None
         self.recovered = False
@@ -97,6 +101,7 @@ class PgClusterMonitor(object):
       limit = 100
       if self.alertman:
         while limit>0:
+          mylog.info( "Sending alert '%s' emails to %s" % (subject, self.alertman.addresslist ) )
           self.alertman.alert( subject, msg)
           time.sleep(notifyinterval)
           notifyinterval=notifyinterval*2
@@ -112,6 +117,7 @@ class PgClusterMonitor(object):
         assert cfg['PG_CONN_INFO']
         assert cfg['REPMGR_CONFIG']
       except:
+        mylog.error( "configfile speciied is invalid. See standard out for details." )
         print( """configfile must be specified and reference a valid configuration file. 
 A valid configuration is a python file (with any extension) with the following parameters set:
 
@@ -187,6 +193,7 @@ execute the following command:
                 if not(self.failedAt):
                   self.failedAt = datetime.datetime.now()
                 print( "[%s] master failed" % datetime.datetime.now() )
+                mylog.warn( "Master failed" )
                 self.promote_slave()
                 
                 raise MasterFailed( "Master failed" )
@@ -196,6 +203,8 @@ execute the following command:
         return enginemap
 
     def _promote_slave(self):
+        mylog.warn( "Promoting slave to be cluster active master" )
+        mylog.info( self.promote_command )
         print( "%s" % self.promote_command )
         proc = subprocess.Popen( self.promote_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT )
 
@@ -203,6 +212,12 @@ execute the following command:
         self.lastPromotion = "\n".join( [ repr(pstdout)  ] )
 
         print( repr(pstdout) )
+
+        if "STANDBY PROMOTE successful" in pstdout:
+            mylog.info( "Slave promotion was succesful" )
+        else:
+            mylog.warn( "Slave promotion to cluster active master failed!" )
+            mylog.error( repr(pstdout) )
         return proc.returncode == 0
 
         
@@ -221,6 +236,7 @@ execute the following command:
         if conn:
           # TODO: Add support to promote remote slaves (via SSH)
           print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
+          mylog.info( "Slave %s is up. Attempting to promote it." % n['name'] )
           success = self._promote_slave()
           reconnect_attempts = reconnect_attempts - 1
           time.sleep( self.reconnect_interval )
@@ -257,10 +273,37 @@ execute the following command:
             import traceback
             print( err )
             traceback.print_exc( err )
+            mylog.error( "Exception", exc_info=1 )
         
         return conn
-        
+
+def initLogging(loglevel=logging.DEBUG, logmodule="pgmonitor"):
+    global mylog
+
+    l = logging.getLogger( logmodule )
+    l.setLevel( loglevel )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logdir = os.environ.get( 'PGMON_LOG_DIR', '.' )
+    logfile = os.path.join( logdir, "%s.log" % logmodule )
+    fh = logging.FileHandler( logfile )
+    fh.setLevel(loglevel)
+    fh.setFormatter( formatter )
+    print( "Logging to %s" % logfile )
+
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(formatter)
+
+    l.addHandler(fh)
+    l.addHandler(ch)
+
+    mylog = l
+    print("mylog is set.")
+    
+    
 def main():
+    global mylog
+    initLogging()
     ap = argparse.ArgumentParser(description='Bluestone PG Monitor Tool.')
     ap.add_argument('-q','--quiet', help='Reduce the verbosity of the tool.', default="false")
     ap.add_argument('-c','--configfile', help='Specify the location of the config file.', default='pg_monitor.conf')
@@ -269,6 +312,7 @@ def main():
     args = ap.parse_args()
 
     quiet = True if args.quiet == "true" else False
+    
 
     if os.environ.get( 'PGMON_PID', None) :
         pgmonPid = os.environ[ 'PGMON_PID' ]
@@ -280,14 +324,16 @@ def main():
         try:
           with pid.PidFile( pidname=pidname ):
             mon = PgClusterMonitor(args.configfile, quiet=quiet)
+            mylog.info( "pg_monitor started with pidfile: PGMON_PID=%s" % pgmonPid )
             mon.monitor()
         except pid.PidFileAlreadyLockedError:
-            print( "Unable to create pidfile=%s! Is another pg_monitor running?" % pgmonPid )
+            mylog.error( "Unable to create pidfile=%s! Is another pg_monitor running?" % pgmonPid )
             raise
     else :
         # Don't use PID file locking.
+        mylog.info( "pg_monitor stated without a pid file." )
         mon = PgClusterMonitor(args.configfile, quiet=quiet)
-        mon.monitor()      
+        mon.monitor()
     
     
 if __name__ == '__main__':
