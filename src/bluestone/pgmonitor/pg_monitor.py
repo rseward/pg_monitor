@@ -95,6 +95,7 @@ class PgClusterMonitor(object):
         self.failedAt = None
         self.lastPromotion = None
         self.recovered = False
+        self.lastAliveLog = None
 
     def alert(self, subject, msg):
       notifyinterval = 120
@@ -136,7 +137,15 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
     def loadReprMgr(self, repmgrconf):
         self.repmgr = import_config( "repmgr", repmgrconf )
         v = ValidateRepmgr()
-        v.validate( self.repmgr )        
+        v.validate( self.repmgr )
+
+    def logalive(self):
+        """On a periodic basis, log that the monitor is active."""
+
+        now =  datetime.datetime.now()
+        if not(self.lastAliveLog) or (now - self.lastAliveLog).seconds > (3600) :
+            mylog.info( "Alive and monitoring cluster %s." % self.cluster )
+            self.lastAliveLog = now
 
         
     def monitor(self):
@@ -144,25 +153,27 @@ REPR_CONFIG = "/var/lib/postgresql/repmgr/repmgr.conf"
         # Monitor until a failure event occurs.
         failure=False
 
-        while not( failure ):
-            try:
-                enginemap = self.check_nodes()
+        try:
+            while not( failure ):
+                try:
+                    enginemap = self.check_nodes()
 
-                if not(self.quiet):
-                  print("[%s] Cluster %s is healthy." % (datetime.datetime.now(), self.cluster) )
-                time.sleep(15)
-            except MasterFailed as mf:
-                failure = True
-                clusterState= "degraded" if self.recovered else "failed"
+                    if not(self.quiet):
+                      print("[%s] Cluster %s is healthy." % (datetime.datetime.now(), self.cluster) )
+                    time.sleep(15)
+                    self.logalive()
+                except MasterFailed as mf:
+                    failure = True
+                    clusterState= "degraded" if self.recovered else "failed"
 
-                msg = ""
-                if clusterState == "failed":
-                  msg = "\n\nQuick action is required to restore the cluster to health! Please bring the cluster back up."
-                else:
-                  msg = "\n\nThe master node must be restored to bring the cluster to a healthy state."
-                
-                self.alert( 'Master Failed',
-                    """Cluster %s is currently in a %s state. %s
+                    msg = ""
+                    if clusterState == "failed":
+                      msg = "\n\nQuick action is required to restore the cluster to health! Please bring the cluster back up."
+                    else:
+                      msg = "\n\nThe master node must be restored to bring the cluster to a healthy state."
+
+                    self.alert( 'Master Failed',
+                                """Cluster %s is currently in a %s state. %s
 
 Monitor on %s observed Master %s fail at %s. 
 
@@ -177,8 +188,20 @@ execute the following command:
     sudo /etc/init.d/pgmonitor stop
 """
                             % ( self.cluster, clusterState, msg, getHostname(), self.master, self.failedAt, self.fixnewlines(self.lastPromotion).strip(), getHostname()   )
-                )
-                raise
+                    )
+                    raise
+        finally:
+            self.alert( "pg_monitor exiting, final message",
+                        """pg_monitor is exiting. Please investigate the %s cluster failure. 
+
+Please take corrective action to restore the cluster. 
+
+Afterwards restart pg_monitor to resume monitoring of the clustering for a failover event.
+  /etc/init.d/pgmonitor restart
+
+Thank you,
+pg_monitor@%s
+""" % (self.cluster, getHostname() ) )
 
     def fixnewlines(self, str):
       return str.replace('\\r',chr(13)).replace('\\n',chr(10))
