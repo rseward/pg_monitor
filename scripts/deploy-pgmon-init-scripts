@@ -69,6 +69,10 @@ screen -ls
 
 export PGMON_PID=%s/pg_monitor.pid
 
+if [ -f /etc/sysconfig/pgmonitor ] ; then
+  . /etc/sysconfig/pgmonitor
+fi;
+
 # Run the pg_monitor script, which should be on the path from the python virtual environment.
 pg_monitor --configfile %s
                      """ % (activatePyve, cwd, args.configfile) )
@@ -124,7 +128,7 @@ restart)
 
 start)
   chown -R $OWNER $PGMON_HOME
-  $SU -l $OWNER -c $script
+  $SU -m -l $OWNER -c $script
   ;;
 
 stop)
