@@ -111,6 +111,9 @@ PGMON_HOME=%s
 export PGMON_PID=$PGMON_HOME/pg_monitor.pid
 script=$PGMON_HOME/start.sh
 
+if [ -f /etc/sysconfig/pgmonitor ] ; then
+  . /etc/sysconfig/pgmonitor
+fi;
 
 
 case $method in
@@ -141,13 +144,6 @@ status)
      ps -ef | grep $( cat $PGMON_PID )
   fi;
   ;;
-
-register)
-  # register the service to start on boot                                       
-  update-rc.d bodhala-wscore defaults
-  update-rc.d bodhala-wscore start 99 3 4 5
-  ;;
-
 
 esac
 """ % cwd )
