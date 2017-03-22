@@ -96,6 +96,7 @@ class PgClusterMonitor(object):
         self.lastPromotion = None
         self.recovered = False
         self.lastAliveLog = None
+        self.promote_mode = 'manual'
 
     def alert(self, subject, msg):
       notifyinterval = 120
@@ -260,7 +261,8 @@ pg_monitor@%s
           # TODO: Add support to promote remote slaves (via SSH)
           print( "[%s] Slave %s is up. Attempting to promote it." % (datetime.datetime.now(), n['name']) )
           mylog.info( "Slave %s is up. Attempting to promote it." % n['name'] )
-          success = self._promote_slave()
+          if self.promot_mode == "auto":
+              success = self._promote_slave()
           reconnect_attempts = reconnect_attempts - 1
           time.sleep( self.reconnect_interval )
           self.recovered = success
